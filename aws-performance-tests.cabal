@@ -86,6 +86,7 @@ executable dynamodb-performance
         aws >= 0.10.3,
         aws-performance-tests,
         base == 4.*,
+        bytestring >= 0.10,
         configuration-tools >= 0.2.4,
         containers >= 0.5,
         dlist >= 0.7,

@@ -40,6 +40,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Control
 import Control.Monad.Trans.Resource
 
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.DList as D
 import qualified Data.List as L
 import qualified Data.Map as M
@@ -286,11 +287,12 @@ testQueries prefix n = map (\i -> DY.hk "Id" (DY.DString $ prefix <> "-" <> ssho
 runThread
     :: (Transaction r x, ServiceConfiguration r ~ DY.DdbConfiguration)
     => Configuration
+    -> DY.DdbConfiguration NormalQuery
     -> HTTP.Manager
     -> [r]
     -> IO Stat
-runThread cfg manager = flip foldM mempty $ \stat req -> do
-    (t,response) <- time . runResourceT $ aws cfg dyConfiguration manager req
+runThread cfg dyCfg manager = flip foldM mempty $ \stat req -> do
+    (t,response) <- time . runResourceT $ aws cfg dyCfg manager req
     case responseResult response of
         Right _ -> return $ stat <> successStat (realToFrac t * 1000)
         Left e -> return $ stat <> failStat (realToFrac t * 1000) (sshow e)
@@ -308,7 +310,7 @@ runTestGlobalManager testName TestParams{..} mkRequests = do
     cfg <- baseConfiguration
     (t, stats) <- HTTP.withManager managerSettings $ \manager ->
         time $ mapConcurrently
-            (runThread cfg manager)
+            (runThread cfg dyCfg manager)
             (map mkRequests [0.. _paramThreadCount - 1])
 
     -- report results
@@ -321,6 +323,9 @@ runTestGlobalManager testName TestParams{..} mkRequests = do
         writeChart prefix testName stat
 #endif
   where
+    dyCfg = dyConfiguration
+        { DY.ddbcRegion = _paramRegion
+        }
     managerSettings = HTTP.defaultManagerSettings
         { HTTP.managerConnCount = _paramThreadCount + 5
         , HTTP.managerResponseTimeout = Just (1000 * 1000000) -- 1 second
@@ -342,7 +347,7 @@ runTest testName TestParams{..} mkRequests = do
     T.putStrLn $ "Start test \"" <> testName <> "\""
     cfg <- baseConfiguration
     (t, stats) <- time $ mapConcurrently
-        (\r -> HTTP.withManager managerSettings $ \m -> runThread cfg m r)
+        (\r -> HTTP.withManager managerSettings $ \m -> runThread cfg dyCfg m r)
         (map mkRequests [0.. _paramThreadCount - 1])
 
     -- report results
@@ -355,6 +360,9 @@ runTest testName TestParams{..} mkRequests = do
         writeChart prefix testName stat
 #endif
   where
+    dyCfg = dyConfiguration
+        { DY.ddbcRegion = _paramRegion
+        }
     managerSettings = HTTP.defaultManagerSettings
         { HTTP.managerConnCount = 1
         , HTTP.managerResponseTimeout = Just (1000 * 1000000) -- 1 second
@@ -413,8 +421,9 @@ data TestParams = TestParams
 #ifdef WITH_CHART
     , _paramChartFilePrefix :: !(Maybe String)
 #endif
+    , _paramRegion :: !DY.Region
     }
-    deriving (Show, Read, Eq, Ord, Typeable)
+    deriving (Show, Read, Eq, Typeable)
 
 defaultTestParams :: TestParams
 defaultTestParams = TestParams
@@ -428,6 +437,7 @@ defaultTestParams = TestParams
 #ifdef WITH_CHART
     , _paramChartFilePrefix = Nothing
 #endif
+    , _paramRegion = DY.ddbUsWest2
     }
 
 $(makeLenses ''TestParams)
@@ -444,6 +454,7 @@ instance ToJSON TestParams where
 #ifdef WITH_CHART
         , "ChartFilePrefix" .= _paramChartFilePrefix
 #endif
+        , "Region" .= B8.unpack (DY.rName _paramRegion)
         ]
 
 instance FromJSON (TestParams -> TestParams) where
@@ -458,6 +469,9 @@ instance FromJSON (TestParams -> TestParams) where
 #ifdef WITH_CHART
         <*< paramChartFilePrefix ..: "ChartFilePrefix" % o
 #endif
+        <*< setProperty paramRegion "Region" parseRegion o
+      where
+        parseRegion = withText "Region" $ either fail return . readRegion
 
 pTestParams :: MParser TestParams
 pTestParams = id
@@ -494,6 +508,11 @@ pTestParams = id
         <> metavar "STRING"
         <> help "if present latency density chargts are written to files with this prefix.")
 #endif
+    <*< paramRegion .:: nullOption
+        % long "region"
+        <> metavar "REGION-STRING"
+        <> help "the AWS region that is used for the test Dynamo database"
+        <> eitherReader (readRegion . T.pack)
 
 -- -------------------------------------------------------------------------- --
 -- Main
