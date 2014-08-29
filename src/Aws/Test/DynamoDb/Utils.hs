@@ -30,6 +30,7 @@ module Aws.Test.DynamoDb.Utils
 , withTable
 , withTable_
 , createTestTable
+, readRegion
 ) where
 
 import Aws
@@ -43,8 +44,10 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control
 
+import qualified Data.List as L
 import Data.Monoid
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 
 import System.IO
@@ -140,4 +143,19 @@ createTestTable tableName readCapacity writeCapacity = void . simpleDy $
         , DY.writeCapacityUnits = writeCapacity
         }
 
-
+readRegion
+    :: T.Text
+    -> Either String DY.Region
+readRegion t =
+    maybe (Left $ "unknown region: " <> T.unpack t) Right $
+        L.find (\(DY.Region _ n) -> T.decodeUtf8 n == t)
+            [ DY.ddbLocal
+            , DY.ddbUsEast1
+            , DY.ddbUsWest1
+            , DY.ddbUsWest2
+            , DY.ddbEuWest1
+            , DY.ddbApNe1
+            , DY.ddbApSe1
+            , DY.ddbApSe2
+            , DY.ddbSaEast1
+            ]
