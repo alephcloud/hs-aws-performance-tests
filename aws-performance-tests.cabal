@@ -88,6 +88,7 @@ executable dynamodb-performance
         base == 4.*,
         configuration-tools >= 0.2.4,
         containers >= 0.5,
+        dlist >= 0.7,
         errors >= 1.4.7,
         http-client >= 0.3,
         lens >= 4.2,

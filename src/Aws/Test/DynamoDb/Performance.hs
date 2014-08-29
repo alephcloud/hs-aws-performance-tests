@@ -40,6 +40,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Control
 import Control.Monad.Trans.Resource
 
+import qualified Data.DList as D
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid
@@ -128,14 +129,14 @@ timeoutT label exConstr t a = do
 data Stat = Stat
     { statFailure :: !Int
     , statSuccess :: !Int
-    , statFailureLatency :: !ST.Sample -- ^ latency in milliseconds
-    , statSuccessLatency :: !ST.Sample -- ^ latency in milliseconds
+    , statFailureLatency :: !(D.DList Double) -- ^ latency in milliseconds
+    , statSuccessLatency :: !(D.DList Double) -- ^ latency in milliseconds
     , statFailureMessages :: !(S.Set T.Text)
     }
     deriving (Show, Eq, Ord, Typeable)
 
 instance Monoid Stat where
-    mempty = Stat 0 0 V.empty V.empty S.empty
+    mempty = Stat 0 0 mempty mempty mempty
     (Stat a0 a1 a2 a3 a4) `mappend` (Stat b0 b1 b2 b3 b4) = Stat
         (a0 + b0)
         (a1 + b1)
@@ -144,10 +145,15 @@ instance Monoid Stat where
         (a4 <> b4)
 
 successStat :: Double -> Stat
-successStat l = Stat 0 1 V.empty (V.singleton l) S.empty
+successStat l = Stat 0 1 mempty (D.singleton l) mempty
 
 failStat :: Double -> T.Text -> Stat
-failStat l e = Stat 1 0 (V.singleton l) V.empty (S.singleton e)
+failStat l e = Stat 1 0 (D.singleton l) mempty (S.singleton e)
+
+toSample
+    :: D.DList Double
+    -> ST.Sample
+toSample = V.fromList . D.toList
 
 printResult
     :: T.Text
@@ -165,18 +171,18 @@ printResult testName totalTime Stat{..} = do
         (realToFrac totalTime :: Double)
 
     -- Successes
-    let (succMin, succMax) = ST.minMax statSuccessLatency
-        succMean = ST.mean statSuccessLatency
-        succStdDev = ST.stdDev statSuccessLatency
+    let (succMin, succMax) = ST.minMax succSample
+        succMean = ST.mean succSample
+        succStdDev = ST.stdDev succSample
     printf "Success latencies\n"
     printf "    min: %.2fms, max %.2fms\n" succMin succMax
     printf "    mean: %.2fms, standard deviation: %.2fms\n\n" succMean succStdDev
 
     -- Failures
     unless (statFailure == 0) $ do
-        let (failMin, failMax) = ST.minMax statFailureLatency
-            failMean = ST.mean statFailureLatency
-            failStdDev = ST.stdDev statFailureLatency
+        let (failMin, failMax) = ST.minMax failSample
+            failMean = ST.mean failSample
+            failStdDev = ST.stdDev failSample
         printf "Failure latencies\n"
         printf "    min: %.2fms, max %.2fms\n" failMin failMax
         printf "    mean: %.2fms, standard deviation %.2fms\n\n" failMean failStdDev
@@ -186,6 +192,9 @@ printResult testName totalTime Stat{..} = do
         forM_ (S.toList statFailureMessages) $ \e ->
             T.putStrLn $ "    " <> sshow e
         printf "\n"
+  where
+    succSample = toSample statSuccessLatency
+    failSample = toSample statFailureLatency
 
 writeLatencyData
     :: String -- ^ file name prefix
@@ -193,8 +202,8 @@ writeLatencyData
     -> Stat -- ^ results
     -> IO ()
 writeLatencyData prefix testName Stat{..} = do
-    writeSample (prefix <> "-" <> T.unpack testName <> "-success.txt") statSuccessLatency
-    writeSample (prefix <> "-" <> T.unpack testName <> "-failure.txt") statFailureLatency
+    writeSample (prefix <> "-" <> T.unpack testName <> "-success.txt") (toSample statSuccessLatency)
+    writeSample (prefix <> "-" <> T.unpack testName <> "-failure.txt") (toSample statFailureLatency)
 
 #ifdef WITH_CHART
 -- -------------------------------------------------------------------------- --
@@ -240,7 +249,7 @@ writeChart
 writeChart prefix testName Stat{..} = renderableToPDFFile render 800 600 $
     prefix <> "-" <> T.unpack testName <> "-density.pdf"
   where
-    render = densityChart statSuccessLatency statFailureLatency
+    render = densityChart (toSample statSuccessLatency) (toSample statFailureLatency)
 
 #endif
 
