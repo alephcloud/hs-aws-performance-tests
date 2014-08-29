@@ -55,7 +55,7 @@ The Haskell build-tools are installed via:
 cabal install alex happy gtk2hs-buildtools
 ~~~
 
-You then pass the flag '-fwith-chart' to the the installation commands:
+You then pass the flag `-fwith-chart` to the the installation commands:
 
 ~~~{.bash}
 cabal install aws-performance-tests -fwith-chart
@@ -72,14 +72,14 @@ cabal install -fwith-chart
 Usage
 =====
 
-After installing the package you'll find the executable 'dynamodb-performance' in the
+After installing the package you'll find the executable `dynamodb-performance` in the
 default location where cabal is configured to install binaries.
 
 In order to use the application you must put your AWS API credentials for
-your AWS account in the file '~/.aws-keys' as described in the
+your AWS account in the file `~/.aws-keys` as described in the
 [Documentation of the aws package](https://github.com/aristidb/aws#example-usage).
 
-For help on available options you may call the executable with '--help':
+For help on available options you may call the executable with `--help`:
 
 ~~~{.bash}
 dynamodb-performance --help
