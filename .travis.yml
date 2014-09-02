@@ -2,9 +2,12 @@ language: haskell
 ghc:
     - 7.6
     - 7.8
+env:
+    - CHART_BOUND=1.3
+    - CHART_BOUND=10
 install:
         - sudo apt-get install -qq libcairo2
         - cabal install Cabal --constraint='Cabal>=1.20' --constraint='directory>=1.2.1.0' alex happy gtk2hs-buildtools
-        - cabal install --only-dependencies -fwith-chart
+        - cabal install --only-dependencies -fwith-chart --constraint="Chart<$CHART_BOUND"
 script:
         - cabal configure -fwith-chart && cabal build
