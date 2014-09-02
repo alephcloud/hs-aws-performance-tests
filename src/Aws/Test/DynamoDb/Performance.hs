@@ -226,7 +226,9 @@ chart chartTitle dats = toRenderable layout
         & layout_title .~ T.unpack chartTitle
         & layout_background .~ solidFillStyle (opaque white)
         & layout_left_axis_visibility . axis_show_ticks .~ False
+#if !MIN_VERSION_Chart(1,3,0)
         & setLayoutForeground (opaque black)
+#endif
         & layout_plots .~ [ toPlot (pl d) | d <- dats ]
 
 densityChart
@@ -247,9 +249,15 @@ writeChart
     -> T.Text -- ^ test name
     -> Stat -- ^ results
     -> IO ()
-writeChart prefix testName Stat{..} = renderableToPDFFile render 800 600 $
-    prefix <> "-" <> T.unpack testName <> "-density.pdf"
+writeChart prefix testName Stat{..} = void $
+#if MIN_VERSION_Chart_cairo(1,3,0)
+    renderableToFile opts path render
+#else
+    renderableToFile opts render path
+#endif
   where
+    path = prefix <> "-" <> T.unpack testName <> "-density.pdf"
+    opts = FileOptions (800,600) PDF
     render = densityChart (toSample statSuccessLatency) (toSample statFailureLatency)
 
 #endif
