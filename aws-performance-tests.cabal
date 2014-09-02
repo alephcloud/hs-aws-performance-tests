@@ -94,6 +94,7 @@ executable dynamodb-performance
         http-client >= 0.3,
         lens >= 4.2,
         monad-control >= 0.3,
+        optparse-applicative >= 0.10,
         resourcet >= 1.1,
         statistics >= 0.12,
         text >= 1.1,

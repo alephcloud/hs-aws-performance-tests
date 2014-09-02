@@ -475,19 +475,19 @@ instance FromJSON (TestParams -> TestParams) where
 
 pTestParams :: MParser TestParams
 pTestParams = id
-    <$< paramThreadCount .:: option
+    <$< paramThreadCount .:: option auto
         % long "thread-count"
         <> metavar "INT"
         <> help "number of request threads"
-    <*< paramRequestCount .:: option
+    <*< paramRequestCount .:: option auto
         % long "request-count"
         <> metavar "INT"
         <> help "number of requests PER THREAD"
-    <*< paramReadCapacity .:: option
+    <*< paramReadCapacity .:: option auto
         % long "read-capacity"
         <> metavar "INT"
         <> help "minimum provisioned read capacity for the test table"
-    <*< paramWriteCapacity .:: option
+    <*< paramWriteCapacity .:: option auto
         % long "write-capacity"
         <> metavar "INT"
         <> help "minimum provisioned write capacity for the test table"
@@ -508,11 +508,10 @@ pTestParams = id
         <> metavar "STRING"
         <> help "if present latency density chargts are written to files with this prefix.")
 #endif
-    <*< paramRegion .:: nullOption
+    <*< paramRegion .:: option (eitherReader (readRegion . T.pack))
         % long "region"
         <> metavar "REGION-STRING"
         <> help "the AWS region that is used for the test Dynamo database"
-        <> eitherReader (readRegion . T.pack)
 
 -- -------------------------------------------------------------------------- --
 -- Main
