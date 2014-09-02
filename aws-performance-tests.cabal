@@ -3,7 +3,7 @@
 -- ------------------------------------------------------ --
 
 Name: aws-performance-tests
-Version: 0.1
+Version: 0.1.1
 Synopsis: Performance Tests for the Haskell bindings for Amazon Web Services (AWS)
 Description:
     Performance Tests for the Haskell bindings for
@@ -48,7 +48,7 @@ source-repository head
 source-repository this
     type: git
     location: https://github.com/alephcloud/hs-aws-performance-tests.git
-    tag: 0.1
+    tag: 0.1.1
 
 Flag with-chart
     Description: Build applications with support for printing charts.
