@@ -192,14 +192,14 @@ syncIO a = EitherT $ LE.catches (Right <$> a)
 testData :: (IsString a, Monoid a) => a -> a
 testData a = testDataPrefix <> a
 
-retryT :: MonadIO m => Int -> EitherT T.Text m a -> EitherT T.Text m a
+retryT :: (LE.Exception e, MonadIO m) => Int -> EitherT e m a -> EitherT TestException m a
 retryT n f = snd <$> retryT_ n f
 
-retryT_ :: MonadIO m => Int -> EitherT T.Text m a -> EitherT T.Text m (Int, a)
+retryT_ :: (LE.Exception e, MonadIO m) => Int -> EitherT e m a -> EitherT TestException m (Int, a)
 retryT_ n f = go 1
   where
     go x
-        | x >= n = fmapLT (\e -> "error after " <> sshow x <> " retries: " <> e) ((x,) <$> f)
+        | x >= n = fmapLT (RetryException x . LE.toException) ((x,) <$> f)
         | otherwise = ((x,) <$> f) `catchT` \_ -> do
             liftIO $ threadDelay (1000000 * min 60 (2^(x-1)))
             go (succ x)

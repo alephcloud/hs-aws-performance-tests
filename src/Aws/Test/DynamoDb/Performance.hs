@@ -33,11 +33,8 @@ import Configuration.Utils
 
 import Control.Concurrent.Async
 import Control.Error
-import Control.Exception
 import Control.Lens hiding (act, (.=))
 import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Control
 import Control.Monad.Trans.Resource
 
 import qualified Data.ByteString.Char8 as B8
@@ -292,6 +289,66 @@ pTestParams = id
         <> help "the AWS region that is used for the test Dynamo database"
 
 -- -------------------------------------------------------------------------- --
+-- Test Table
+
+withTestTable
+    :: TestParams
+    -> (T.Text -> IO a)
+    -> IO a
+withTestTable TestParams{..} f = HTTP.withManager managerSettings $ \manager -> do
+
+    cfg <- baseConfiguration
+    let runDyT :: DyT
+        runDyT = dyT cfg dyCfg manager
+
+    -- Check if table exists
+    tabDesc <- (Just <$> memDyT runDyT (DY.DescribeTable _paramTableName))
+        `fromEitherET_` \x -> case fmap DY.ddbErrCode x of
+            Right DY.ResourceNotFoundException -> return Nothing
+            Right e -> error $ "unexpected exception when checking for existence of table: " <> show e
+            Left e -> error $ "unexpected exception when checking for existence of table: " <> show e
+        -- \(e :: Maybe DY.DdbError) ->
+
+    -- Prepare table
+    case (tabDesc, _paramKeepTable) of
+
+        (Nothing, False) -> withTable_ runDyT False _paramTableName _paramReadCapacity _paramWriteCapacity f
+
+        (Nothing, True) -> do
+            r <- runEitherT $ do
+                retryT 3 $ createTestTable runDyT _paramTableName _paramReadCapacity _paramWriteCapacity
+                retryT 6 $ do
+                    tableDesc <- memDyT runDyT $ DY.DescribeTable _paramTableName
+                    when (DY.rTableStatus tableDesc == "CREATING") $ testThrowT "Table not ready: status CREATING"
+                    return _paramTableName
+            either (error . show) f r
+
+        (Just DY.TableDescription{..}, _) -> do
+
+            -- Check table
+            let tableReadCapacity = DY.statusReadCapacityUnits rProvisionedThroughput
+            let tableWriteCapacity = DY.statusWriteCapacityUnits rProvisionedThroughput
+
+            unless (rTableStatus == "ACTIVE") . error $ "Table not ready: status " <> T.unpack rTableStatus
+
+            when (tableReadCapacity < _paramReadCapacity) . error $
+                "Read capacity of table " <> T.unpack _paramTableName <> " is not enough; requested "
+                <> sshow _paramReadCapacity <> " provisioned: " <> sshow tableReadCapacity
+
+            when (tableWriteCapacity < _paramWriteCapacity) . error $
+                "Write capacity of table " <> T.unpack _paramTableName <> " is not enough; requested "
+                <> sshow _paramWriteCapacity <> " provisioned: " <> sshow tableWriteCapacity
+
+            -- return table
+            f _paramTableName
+  where
+    dyCfg :: DY.DdbConfiguration NormalQuery
+    dyCfg = dyConfiguration
+        { DY.ddbcRegion = _paramRegion
+        }
+    managerSettings = HTTP.defaultManagerSettings
+
+-- -------------------------------------------------------------------------- --
 -- Main
 
 mainInfo :: ProgramInfo TestParams
@@ -317,47 +374,8 @@ mainInfo = programInfo "Dynamo Performace Test" pTestParams defaultTestParams
 main :: IO ()
 main = runWithPkgInfoConfiguration mainInfo pkgInfo $ \params@TestParams{..} -> do
 
-    -- Check if table exists
-    tabDesc <- (Just <$> simpleDy (DY.DescribeTable _paramTableName)) `catch` \(e :: DY.DdbError) ->
-        case DY.ddbErrCode e of
-            DY.ResourceNotFoundException -> return Nothing
-            _ -> error $ "unexpected exception when checking for existence of table: " <> show e
-
-    -- Prepare table
-    let getTable = case (tabDesc, _paramKeepTable) of
-
-            (Nothing, False) -> withTable_ False _paramTableName _paramReadCapacity _paramWriteCapacity
-
-            (Nothing, True) -> \f -> do
-                r <- runEitherT $ do
-                    retryT 3 $ tryT $ createTestTable _paramTableName _paramReadCapacity _paramWriteCapacity
-                    retryT 6 $ do
-                        tableDesc <- simpleDyT $ DY.DescribeTable _paramTableName
-                        when (DY.rTableStatus tableDesc == "CREATING") $ left "Table not ready: status CREATING"
-                        return _paramTableName
-                either (error . T.unpack) f r
-
-            (Just DY.TableDescription{..}, _) -> \f -> do
-
-                -- Check table
-                let tableReadCapacity = DY.statusReadCapacityUnits rProvisionedThroughput
-                let tableWriteCapacity = DY.statusWriteCapacityUnits rProvisionedThroughput
-
-                unless (rTableStatus == "ACTIVE") . error $ "Table not ready: status " <> T.unpack rTableStatus
-
-                when (tableReadCapacity < _paramReadCapacity) . error $
-                    "Read capacity of table " <> T.unpack _paramTableName <> " is not enough; requested "
-                    <> sshow _paramReadCapacity <> " provisioned: " <> sshow tableReadCapacity
-
-                when (tableWriteCapacity < _paramWriteCapacity) . error $
-                    "Write capacity of table " <> T.unpack _paramTableName <> " is not enough; requested "
-                    <> sshow _paramWriteCapacity <> " provisioned: " <> sshow tableWriteCapacity
-
-                -- return table
-                f _paramTableName
-
     -- Initialize table and run tests
-    getTable $ \tableName -> do
+    withTestTable params $ \tableName -> do
         runTest "put"  params $ putItems tableName _paramRequestCount
         runTest "get0" params $ getItems0 tableName _paramRequestCount
         runTest "get1" params $ getItems1 tableName _paramRequestCount
