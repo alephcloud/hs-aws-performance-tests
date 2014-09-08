@@ -460,15 +460,15 @@ pTestParams = id
     <*< paramKeepTable .:: switch
         % long "keep-table"
         <> help "don't delete table of the test. This is always true for pre-existing tables."
-    <*< (paramDataFilePrefix .:: fmap Just % strOption
+    <*< paramDataFilePrefix .:: fmap Just % strOption
         % long "data-file-prefix"
         <> metavar "STRING"
-        <> help "if present raw latency data is written to files with this prefix.")
+        <> help "if present raw latency data is written to files with this prefix."
 #ifdef WITH_CHART
-    <*< (paramChartFilePrefix .:: fmap Just % strOption
+    <*< paramChartFilePrefix .:: fmap Just % strOption
         % long "chart-file-prefix"
         <> metavar "STRING"
-        <> help "if present latency density chargts are written to files with this prefix.")
+        <> help "if present latency density chargts are written to files with this prefix."
 #endif
     <*< paramRegion .:: option (eitherReader (readRegion . T.pack))
         % long "region"
