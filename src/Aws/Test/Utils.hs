@@ -15,7 +15,7 @@
 --
 module Aws.Test.Utils
 (
--- * Parameters
+-- * Test Parameters
   testDataPrefix
 
 -- * General Utils
