@@ -41,201 +41,17 @@ import Control.Monad.Trans.Control
 import Control.Monad.Trans.Resource
 
 import qualified Data.ByteString.Char8 as B8
-import qualified Data.DList as D
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid
-import qualified Data.Set as S
 import qualified Data.Text as T
-import qualified Data.Text.Lens as T
 import qualified Data.Text.IO as T
-import qualified Data.Text.Read as T
+import qualified Data.Text.Lens as T
 import Data.Typeable
-import qualified Data.Vector.Unboxed as V
 
 import qualified Network.HTTP.Client as HTTP
 
 import PkgInfo
-
-import qualified Statistics.Function as ST
-import qualified Statistics.Sample as ST
-
-import System.IO
-
-import Text.Printf
-
-#ifdef WITH_CHART
--- Used for plotting
-import Control.Arrow ((***))
-
-import Data.Default
-import Data.Colour
-import Data.Colour.Names
-
-import Graphics.Rendering.Chart hiding (label)
-import Graphics.Rendering.Chart.Backend.Cairo
-
-import qualified Statistics.Sample.KernelDensity as ST
-#endif
-
--- -------------------------------------------------------------------------- --
--- Statistics
-
-data Stat = Stat
-    { statFailure :: !Int
-    , statSuccess :: !Int
-    , statFailureLatency :: !(D.DList Double) -- ^ latency in milliseconds
-    , statSuccessLatency :: !(D.DList Double) -- ^ latency in milliseconds
-    , statFailureMessages :: !(S.Set T.Text)
-    }
-    deriving (Show, Eq, Ord, Typeable)
-
-instance Monoid Stat where
-    mempty = Stat 0 0 mempty mempty mempty
-    (Stat a0 a1 a2 a3 a4) `mappend` (Stat b0 b1 b2 b3 b4) = Stat
-        (a0 + b0)
-        (a1 + b1)
-        (a2 <> b2)
-        (a3 <> b3)
-        (a4 <> b4)
-
-successStat :: Double -> Stat
-successStat l = Stat 0 1 mempty (D.singleton l) mempty
-
-failStat :: Double -> T.Text -> Stat
-failStat l e = Stat 1 0 (D.singleton l) mempty (S.singleton e)
-
-toSample
-    :: D.DList Double
-    -> ST.Sample
-toSample = V.fromList . D.toList
-
-printResult
-    :: T.Text
-    -> NominalDiffTime
-    -> Stat
-    -> IO ()
-printResult testName totalTime Stat{..} = do
-
-    -- Overview
-    printf "Test \"%v\" completed %v requests (%v successes, %v failures) in %.2fs\n\n"
-        (T.unpack testName)
-        (statSuccess + statFailure)
-        statSuccess
-        statFailure
-        (realToFrac totalTime :: Double)
-
-    -- Successes
-    let (succMin, succMax) = ST.minMax succSample
-        succMean = ST.mean succSample
-        succStdDev = ST.stdDev succSample
-    printf "Success latencies\n"
-    printf "    min: %.2fms, max %.2fms\n" succMin succMax
-    printf "    mean: %.2fms, standard deviation: %.2fms\n\n" succMean succStdDev
-
-    -- Failures
-    unless (statFailure == 0) $ do
-        let (failMin, failMax) = ST.minMax failSample
-            failMean = ST.mean failSample
-            failStdDev = ST.stdDev failSample
-        printf "Failure latencies\n"
-        printf "    min: %.2fms, max %.2fms\n" failMin failMax
-        printf "    mean: %.2fms, standard deviation %.2fms\n\n" failMean failStdDev
-
-        -- Failure Messages
-        printf "Failure Messages:\n"
-        forM_ (S.toList statFailureMessages) $ \e ->
-            T.putStrLn $ "    " <> sshow e
-        printf "\n"
-  where
-    succSample = toSample statSuccessLatency
-    failSample = toSample statFailureLatency
-
-writeLatencyData
-    :: String -- ^ file name prefix
-    -> T.Text -- ^ test name
-    -> Stat -- ^ results
-    -> IO ()
-writeLatencyData prefix testName Stat{..} = do
-    writeSample (prefix <> "-" <> T.unpack testName <> "-success.txt") (toSample statSuccessLatency)
-    writeSample (prefix <> "-" <> T.unpack testName <> "-failure.txt") (toSample statFailureLatency)
-
-#ifdef WITH_CHART
--- -------------------------------------------------------------------------- --
--- Plotting
-
-chart
-    :: T.Text -- ^ title of the chart
-    -> [(String, Colour Double, [(LogValue, Double)])] -- ^ title color and data for each plot
-    -> Renderable ()
-chart chartTitle dats = toRenderable layout
-  where
-    pl (title, color, results) = def
-        & plot_points_title .~ title
-        & plot_points_style . point_color .~ opaque color
-        & plot_points_style . point_radius .~ 1
-        & plot_points_values .~ results
-
-    layout = def
-        & layout_title .~ T.unpack chartTitle
-        & layout_background .~ solidFillStyle (opaque white)
-        & layout_left_axis_visibility . axis_show_ticks .~ False
-#if !MIN_VERSION_Chart(1,3,0)
-        & setLayoutForeground (opaque black)
-#endif
-        & layout_plots .~ [ toPlot (pl d) | d <- dats ]
-
-densityChart
-    :: V.Vector Double
-    -> V.Vector Double
-    -> Renderable ()
-densityChart successes failures = chart "Density" $
-    if V.null successes then [] else [("success", blue, succDat)]
-    <>
-    if V.null failures then [] else [("failures", red, failDat)]
-  where
-    succDat,failDat :: [(LogValue, Double)]
-    succDat = uncurry zip . (map LogValue . V.toList *** map (* 2048) . V.toList) $ ST.kde 2048 successes
-    failDat = uncurry zip . (map LogValue . V.toList *** map (* 2048) . V.toList) $ ST.kde 2048 failures
-
-writeChart
-    :: String -- ^ file name prefix
-    -> T.Text -- ^ test name
-    -> Stat -- ^ results
-    -> IO ()
-writeChart prefix testName Stat{..} = void $
-#if MIN_VERSION_Chart_cairo(1,3,0)
-    renderableToFile opts path render
-#else
-    renderableToFile opts render path
-#endif
-  where
-    path = prefix <> "-" <> T.unpack testName <> "-density.pdf"
-    opts = FileOptions (800,600) PDF
-    render = densityChart (toSample statSuccessLatency) (toSample statFailureLatency)
-
-#endif
-
--- -------------------------------------------------------------------------- --
--- Serialize latencies
-
-writeSample
-    :: FilePath
-    -> ST.Sample
-    -> IO ()
-writeSample file sample = withFile file WriteMode $ \h ->
-    V.forM_ sample $ T.hPutStrLn h . sshow
-
-readSample
-    :: FilePath
-    -> IO ST.Sample
-readSample file = withFile file ReadMode $ fmap V.fromList . go
-  where
-    go h = hIsEOF h >>= \x -> if x
-        then return []
-        else do
-            r <- either error fst . T.double <$> T.hGetLine h
-            (:) r <$> go h
 
 -- -------------------------------------------------------------------------- --
 -- Running Tests
@@ -277,12 +93,12 @@ runTestGlobalManager testName TestParams{..} mkRequests = do
 
     -- report results
     let stat = mconcat stats
-    printResult testName t stat
+    printStat testName t stat
     whenJust _paramDataFilePrefix $ \prefix ->
-        writeLatencyData prefix testName stat
+        writeStatFiles prefix testName stat
 #ifdef WITH_CHART
     whenJust _paramChartFilePrefix $ \prefix ->
-        writeChart prefix testName stat
+        writeStatChart prefix testName stat
 #endif
   where
     dyCfg = dyConfiguration
@@ -314,12 +130,12 @@ runTest testName TestParams{..} mkRequests = do
 
     -- report results
     let stat = mconcat stats
-    printResult testName t stat
+    printStat testName t stat
     whenJust _paramDataFilePrefix $ \prefix ->
-        writeLatencyData prefix testName stat
+        writeStatFiles prefix testName stat
 #ifdef WITH_CHART
     whenJust _paramChartFilePrefix $ \prefix ->
-        writeChart prefix testName stat
+        writeStatChart prefix testName stat
 #endif
   where
     dyCfg = dyConfiguration

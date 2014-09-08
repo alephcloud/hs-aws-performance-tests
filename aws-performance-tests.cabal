@@ -67,13 +67,29 @@ Library
         aeson >= 0.7,
         aws >= 0.10.3,
         base == 4.*,
+        containers >= 0.5,
+        dlist >= 0.7,
         errors >= 1.4.7,
+        http-client >= 0.3,
+        lens >= 4.2,
         lifted-base >= 0.2,
         monad-control >= 0.3,
         mtl >= 2.1,
+        resourcet >= 1.1,
+        statistics >= 0.12,
         text >= 1.1,
         time >= 1.4,
-        transformers >= 0.3
+        transformers >= 0.3,
+        vector >= 0.10
+
+    if flag(with-chart)
+        build-depends:
+            Chart >= 1.2,
+            Chart-cairo >= 1.2,
+            colour >= 2.3,
+            data-default >= 0.5
+
+        cpp-options: -DWITH_CHART
 
     ghc-options: -Wall
 
@@ -90,26 +106,17 @@ executable dynamodb-performance
         bytestring >= 0.10,
         configuration-tools >= 0.2.4,
         containers >= 0.5,
-        dlist >= 0.7,
         errors >= 1.4.7,
         http-client >= 0.3,
         lens >= 4.2,
         monad-control >= 0.3,
         optparse-applicative >= 0.10,
         resourcet >= 1.1,
-        statistics >= 0.12,
-        text >= 1.1,
         time >= 1.4,
-        transformers >= 0.3,
-        vector >= 0.10
+        text >= 1.1,
+        transformers >= 0.3
 
     if flag(with-chart)
-        build-depends:
-            Chart >= 1.2,
-            Chart-cairo >= 1.2,
-            colour >= 2.3,
-            data-default >= 0.5
-
         cpp-options: -DWITH_CHART
 
     ghc-options: -Wall -threaded -with-rtsopts=-N
