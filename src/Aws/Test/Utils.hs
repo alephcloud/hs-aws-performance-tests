@@ -3,6 +3,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 -- |
 -- Module: Aws.Test.Utils
@@ -17,6 +18,14 @@ module Aws.Test.Utils
 (
 -- * Test Parameters
   testDataPrefix
+
+-- * Exceptions
+, TestException(..)
+, testThrowT
+, toE
+, catchET
+, fromEitherET
+, fromEitherET_
 
 -- * General Utils
 , sshow
@@ -45,6 +54,7 @@ import Data.String
 import qualified Data.Text as T
 import Data.Time
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Typeable
 
 import System.Exit (ExitCode)
 import System.Timeout
@@ -58,6 +68,48 @@ import System.Timeout
 --
 testDataPrefix :: IsString a => a
 testDataPrefix = "__TEST_AWSHASKELLBINDINGS__"
+
+-- -------------------------------------------------------------------------- --
+-- Test Exceptions
+
+data TestException
+    = TestException T.Text
+    | RetryException Int LE.SomeException
+    deriving (Show, Typeable)
+
+instance LE.Exception TestException
+
+testThrowT :: (Monad m) => T.Text -> EitherT LE.SomeException m a
+testThrowT = left . LE.toException . TestException
+
+-- | Generalize Exceptions within an 'EitherT' to 'SomeException'
+--
+toE :: (Monad m, LE.Exception e) => EitherT e m a -> EitherT LE.SomeException m a
+toE = fmapLT LE.toException
+
+catchET
+    :: (Monad m, LE.Exception e)
+    => EitherT LE.SomeException m a
+    -> (e -> EitherT LE.SomeException m a)
+    -> EitherT LE.SomeException m a
+catchET f handler = f `catchT` \e  -> maybe (left e) handler $ LE.fromException e
+
+fromEitherET
+    :: (Monad m, LE.Exception e)
+    => EitherT LE.SomeException m a
+    -> (Maybe e -> m a)
+    -> m a
+fromEitherET f handler = eitherT (handler . LE.fromException) return f
+
+fromEitherET_
+    :: (Monad m, LE.Exception e)
+    => EitherT LE.SomeException m a
+    -> (Either LE.SomeException e -> m a)
+    -> m a
+fromEitherET_ f handler = eitherT
+    (\e -> handler . maybe (Left e) Right $ LE.fromException e)
+    return
+    f
 
 -- -------------------------------------------------------------------------- --
 -- General Utils
