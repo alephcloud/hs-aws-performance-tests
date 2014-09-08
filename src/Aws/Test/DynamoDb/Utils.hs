@@ -143,6 +143,9 @@ createTestTable tableName readCapacity writeCapacity = void . simpleDy $
         , DY.writeCapacityUnits = writeCapacity
         }
 
+-- -------------------------------------------------------------------------- --
+-- Misc Utils
+
 readRegion
     :: T.Text
     -> Either String DY.Region
