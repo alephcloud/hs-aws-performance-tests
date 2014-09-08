@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- |
 -- Module: Aws.Test.Utils
@@ -24,6 +25,11 @@ module Aws.Test.Utils
 , retryT_
 , testData
 , whenJust
+
+-- * Time Measurement
+, time
+, timeT
+, timeoutT
 ) where
 
 import Control.Applicative
@@ -37,8 +43,11 @@ import Data.Dynamic (Dynamic)
 import Data.Monoid
 import Data.String
 import qualified Data.Text as T
+import Data.Time
+import Data.Time.Clock.POSIX (getPOSIXTime)
 
 import System.Exit (ExitCode)
+import System.Timeout
 
 -- -------------------------------------------------------------------------- --
 -- Static Test parameters
@@ -103,4 +112,40 @@ sshow = fromString . show
 whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenJust (Just x) = ($ x)
 whenJust Nothing = const $ return ()
+
+-- -------------------------------------------------------------------------- --
+-- Time Measurment
+
+getTime :: IO Double
+getTime = realToFrac <$> getPOSIXTime
+
+time :: IO a -> IO (NominalDiffTime, a)
+time act = do
+  start <- getTime
+  result <- act
+  end <- getTime
+  let !delta = end - start
+  return (realToFrac delta, result)
+
+timeT :: MonadIO m => m a -> m (NominalDiffTime, a)
+timeT act = do
+  start <- liftIO getTime
+  result <- act
+  end <- liftIO getTime
+  let !delta = end - start
+  return (realToFrac delta, result)
+
+timeoutT
+    :: (MonadBaseControl IO m)
+    => T.Text           -- ^ label
+    -> (T.Text -> b)    -- ^ exception constructor
+    -> NominalDiffTime  -- ^ timeout
+    -> EitherT b m a    -- ^ action
+    -> EitherT b m a
+timeoutT label exConstr t a = do
+    r <- liftBaseWith $ \runInBase ->
+        timeout (round $ t * 1e6) (runInBase a)
+    case r of
+        Nothing -> left $ exConstr $ label <> " timed out after " <> sshow t
+        Just x -> restoreM x
 

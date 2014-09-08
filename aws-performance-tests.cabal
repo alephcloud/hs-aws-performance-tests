@@ -72,6 +72,7 @@ Library
         monad-control >= 0.3,
         mtl >= 2.1,
         text >= 1.1,
+        time >= 1.4,
         transformers >= 0.3
 
     ghc-options: -Wall

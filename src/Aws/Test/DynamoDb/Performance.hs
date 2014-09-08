@@ -50,8 +50,6 @@ import qualified Data.Text as T
 import qualified Data.Text.Lens as T
 import qualified Data.Text.IO as T
 import qualified Data.Text.Read as T
-import Data.Time
-import Data.Time.Clock.POSIX (getPOSIXTime)
 import Data.Typeable
 import qualified Data.Vector.Unboxed as V
 
@@ -63,7 +61,6 @@ import qualified Statistics.Function as ST
 import qualified Statistics.Sample as ST
 
 import System.IO
-import System.Timeout
 
 import Text.Printf
 
@@ -80,42 +77,6 @@ import Graphics.Rendering.Chart.Backend.Cairo
 
 import qualified Statistics.Sample.KernelDensity as ST
 #endif
-
--- -------------------------------------------------------------------------- --
--- Time Measurment
-
-getTime :: IO Double
-getTime = realToFrac <$> getPOSIXTime
-
-time :: IO a -> IO (NominalDiffTime, a)
-time act = do
-  start <- getTime
-  result <- act
-  end <- getTime
-  let !delta = end - start
-  return (realToFrac delta, result)
-
-timeT :: MonadIO m => m a -> m (NominalDiffTime, a)
-timeT act = do
-  start <- liftIO getTime
-  result <- act
-  end <- liftIO getTime
-  let !delta = end - start
-  return (realToFrac delta, result)
-
-timeoutT
-    :: (MonadBaseControl IO m)
-    => T.Text           -- ^ label
-    -> (T.Text -> b)    -- ^ exception constructor
-    -> NominalDiffTime  -- ^ timeout
-    -> EitherT b m a    -- ^ action
-    -> EitherT b m a
-timeoutT label exConstr t a = do
-    r <- liftBaseWith $ \runInBase ->
-        timeout (round $ t * 1e6) (runInBase a)
-    case r of
-        Nothing -> left $ exConstr $ label <> " timed out after " <> sshow t
-        Just x -> restoreM x
 
 -- -------------------------------------------------------------------------- --
 -- Statistics
