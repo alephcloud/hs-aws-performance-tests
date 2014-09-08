@@ -82,13 +82,6 @@ import qualified Statistics.Sample.KernelDensity as ST
 #endif
 
 -- -------------------------------------------------------------------------- --
--- Misc Utils
-
-whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
-whenJust (Just x) = ($ x)
-whenJust Nothing = const $ return ()
-
--- -------------------------------------------------------------------------- --
 -- Time Measurment
 
 getTime :: IO Double

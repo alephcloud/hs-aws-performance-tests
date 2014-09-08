@@ -23,6 +23,7 @@ module Aws.Test.Utils
 , retryT
 , retryT_
 , testData
+, whenJust
 ) where
 
 import Control.Applicative
@@ -98,4 +99,8 @@ retryT_ n f = go 1
 
 sshow :: (Show a, IsString b) => a -> b
 sshow = fromString . show
+
+whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
+whenJust (Just x) = ($ x)
+whenJust Nothing = const $ return ()
 
