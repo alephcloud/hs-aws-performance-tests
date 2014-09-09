@@ -38,6 +38,7 @@ import Control.Monad
 import Control.Monad.Trans.Resource
 
 import qualified Data.ByteString.Char8 as B8
+import qualified Data.CaseInsensitive as CI
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid
@@ -270,8 +271,9 @@ pTestParams = id
         % long "table-name"
         <> metavar "STRING"
         <> help "name oftabel that is used for the tests. If the table does not exit it is created"
-    <*< paramKeepTable .:: switch
+    <*< paramKeepTable .:: option (eitherReader boolReader)
         % long "keep-table"
+        <> metavar "true|false"
         <> help "don't delete table of the test. This is always true for pre-existing tables."
     <*< paramDataFilePrefix .:: fmap Just % strOption
         % long "data-file-prefix"
@@ -287,6 +289,11 @@ pTestParams = id
         % long "region"
         <> metavar "REGION-STRING"
         <> help "the AWS region that is used for the test Dynamo database"
+  where
+    boolReader s = case CI.mk (T.pack s) of
+        "true" -> Right True
+        "false" -> Right False
+        _ -> Left $ "failed to read Boolean value: " <> s
 
 -- -------------------------------------------------------------------------- --
 -- Test Table
