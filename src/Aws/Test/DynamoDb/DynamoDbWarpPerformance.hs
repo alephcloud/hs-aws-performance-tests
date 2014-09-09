@@ -294,7 +294,6 @@ server params = do
                 print =<< readIORef refStat
                 print =<< readIORef refTcpConnections
 
-
   where
     -- A manager that counts TCP connections
     managerSettings ref = defaultManagerSettings
