@@ -308,7 +308,7 @@ pruneHttpError (HTTP.TooManyRedirects _ ) = HTTP.TooManyRedirects []
 pruneHttpError e = e
 
 deleteDateHeader :: (Eq a, IsString a, CI.FoldCase a) => [(CI.CI a, b)] -> [(CI.CI a, b)]
-deleteDateHeader = L.filter ((/= "date") . fst)
+deleteDateHeader = L.filter ((`notElem` ["X-Request-URL", "date"]) . fst)
 
 toSample
     :: D.DList Double
