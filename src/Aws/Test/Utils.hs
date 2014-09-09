@@ -49,6 +49,7 @@ module Aws.Test.Utils
 , failStat
 , logSuccess
 , logFailure
+, pruneHttpError
 , printStat
 , writeStatFiles
 , writeSample
@@ -58,6 +59,7 @@ module Aws.Test.Utils
 #endif
 ) where
 
+import Data.Default
 import Control.Applicative
 import Control.Concurrent (threadDelay)
 import qualified Control.Exception.Lifted as LE
@@ -66,9 +68,11 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Control
 
+import qualified Data.CaseInsensitive as CI
 import qualified Data.DList as D
 import Data.Dynamic (Dynamic)
 import Data.IORef
+import qualified Data.List as L
 import Data.Monoid
 import qualified Data.Set as S
 import Data.String
@@ -79,6 +83,8 @@ import Data.Time
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import qualified Data.Vector.Unboxed as V
 import Data.Typeable
+
+import qualified Network.HTTP.Client as HTTP
 
 import qualified Statistics.Function as ST
 import qualified Statistics.Sample as ST
@@ -93,7 +99,6 @@ import Text.Printf
 -- Used for plotting
 import Control.Arrow ((***))
 
-import Data.Default
 import Data.Colour
 import Data.Colour.Names
 import Control.Lens hiding (act, (.=))
@@ -294,6 +299,16 @@ logFailure
 logFailure ref t e = atomicModifyIORef' ref $ \stat ->
     (stat <> failStat (realToFrac t * 1000) e, ())
 
+-- | Prune HTTP error such that similar exceptions become equal and are
+-- logged only once.
+--
+pruneHttpError :: HTTP.HttpException -> HTTP.HttpException
+pruneHttpError (HTTP.StatusCodeException s h _) = HTTP.StatusCodeException s (deleteDateHeader h) def
+pruneHttpError (HTTP.TooManyRedirects _ ) = HTTP.TooManyRedirects []
+pruneHttpError e = e
+
+deleteDateHeader :: (Eq a, IsString a, CI.FoldCase a) => [(CI.CI a, b)] -> [(CI.CI a, b)]
+deleteDateHeader = L.filter ((/= "date") . fst)
 
 toSample
     :: D.DList Double

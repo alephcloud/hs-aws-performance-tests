@@ -67,7 +67,9 @@ Library
         aeson >= 0.7,
         aws >= 0.10.3,
         base == 4.*,
+        case-insensitive >= 1.2,
         containers >= 0.5,
+        data-default >= 0.5,
         dlist >= 0.7,
         errors >= 1.4.7,
         http-client >= 0.3,
@@ -86,8 +88,7 @@ Library
         build-depends:
             Chart >= 1.2,
             Chart-cairo >= 1.2,
-            colour >= 2.3,
-            data-default >= 0.5
+            colour >= 2.3
 
         cpp-options: -DWITH_CHART
 
