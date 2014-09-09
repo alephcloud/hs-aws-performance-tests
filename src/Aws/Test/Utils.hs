@@ -39,6 +39,7 @@ module Aws.Test.Utils
 , whenJust
 
 -- * Time Measurement
+, getTime
 , time
 , timeT
 , timeoutT
