@@ -296,7 +296,7 @@ server params = do
                 stat ← readIORef refStat
                 printStat "test server" (realToFrac $ endTime - startTime) stat
                 tcpCons ← readIORef refTcpConnections
-                T.putStrLn $ "Number of client TCP connection: " <> sshow tcpCons
+                T.putStrLn $ "Number of client TCP connections: " <> sshow tcpCons
 
   where
     -- A manager that counts TCP connections
