@@ -24,47 +24,40 @@ module Main -- Aws.Test.DynamoDb.DynamoDbWarpPerformance
 ( main
 ) where
 
-import Control.Concurrent.Async
-import Control.Monad
-
-import Data.Aeson.Types (parseEither)
-import qualified Data.ByteString.Lazy.Char8 as LB8
-import qualified Data.ByteString as B
-import Data.Default
-import Data.IORef
-
-import Network.HTTP.Client
-import Network.HTTP.Types
-import qualified Network.Wai as W
-import qualified Network.Wai.Handler.Warp as Warp
-
---
-
 import Aws
 import qualified Aws.DynamoDb as DY
-
 import Aws.Test.Utils
 import Aws.Test.DynamoDb.Utils
 
 import Configuration.Utils
 
+import Control.Concurrent.Async
 import Control.Error
 import Control.Exception
 import Control.Lens hiding (act, (.=))
+import Control.Monad
 
+import Data.Aeson.Types (parseEither)
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
+import qualified Data.ByteString.Lazy.Char8 as LB8
 import qualified Data.ByteString.Lens as B
 import qualified Data.CaseInsensitive as CI
+import Data.Default
+import Data.IORef
 import qualified Data.List as L
 import qualified Data.Map as M
 import Data.Monoid
 import qualified Data.Text as T
-import qualified Data.Text.IO as T
 import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
 import qualified Data.Text.Lens as T
 import Data.Typeable
 
-import qualified Network.HTTP.Client as HTTP
+import Network.HTTP.Client
+import Network.HTTP.Types
+import qualified Network.Wai as W
+import qualified Network.Wai.Handler.Warp as Warp
 
 import PkgInfo
 
@@ -278,7 +271,7 @@ server params = do
         -- ---------------------------------------- --
         -- run server API
         do
-            HTTP.withManager (managerSettings refTcpConnections) $ \manager → do
+            withManager (managerSettings refTcpConnections) $ \manager → do
                 cfg ← baseConfiguration
                 let runDyT ∷ DyT
                     runDyT = dyT cfg dyCfg manager
@@ -365,7 +358,7 @@ withTestTable
     ∷ TestParams
     → (T.Text → IO a)
     → IO a
-withTestTable TestParams{..} f = HTTP.withManager managerSettings $ \manager → do
+withTestTable TestParams{..} f = withManager managerSettings $ \manager → do
 
     cfg ← baseConfiguration
     let runDyT ∷ DyT
@@ -416,21 +409,21 @@ withTestTable TestParams{..} f = HTTP.withManager managerSettings $ \manager →
     dyCfg = dyConfiguration
         { DY.ddbcRegion = _paramRegion
         }
-    managerSettings = HTTP.defaultManagerSettings
+    managerSettings = defaultManagerSettings
 
 -- -------------------------------------------------------------------------- --
 -- Client
 
 runThread
-    ∷ HTTP.Manager
-    → [HTTP.Request]
+    ∷ Manager
+    → [Request]
     → IO Stat
 runThread manager = flip foldM mempty $ \stat req → do
     (t,response) ← time . try $ httpLbs req manager
     case response of
         Right _ → return $ stat <> successStat (realToFrac t * 1000)
         -- FIXME we should also catch IO exceptions, I guess.
-        Left (e ∷ HTTP.HttpException) → return $
+        Left (e ∷ HttpException) → return $
             stat <> failStat (realToFrac t * 1000) (sshow $ pruneHttpError e)
 
 -- | Use one 'Manager' per thread.
@@ -438,12 +431,12 @@ runThread manager = flip foldM mempty $ \stat req → do
 runTest
     ∷ T.Text -- ^ test name
     → ServerParams -- ^ test parameters
-    → (HTTP.Request → Int → [HTTP.Request]) -- ^ requests per thread
+    → (Request → Int → [Request]) -- ^ requests per thread
     → IO ()
 runTest testName ServerParams{..} mkRequests = do
     T.putStrLn $ "Start test \"" <> testName <> "\""
     (t, stats) ← time $ mapConcurrently
-        (\r → HTTP.withManager managerSettings $ \m → runThread m r)
+        (\r → withManager managerSettings $ \m → runThread m r)
         (map (mkRequests req) [0.. (_paramThreadCount _serverTestParams) - 1])
 
     -- report results
@@ -457,17 +450,17 @@ runTest testName ServerParams{..} mkRequests = do
 #endif
   where
     req = def
-        { HTTP.method = "GET"
-        , HTTP.secure = False
-        , HTTP.host = _serverHost
-        , HTTP.port = _serverPort
+        { method = "GET"
+        , secure = False
+        , host = _serverHost
+        , port = _serverPort
         }
-    managerSettings = HTTP.defaultManagerSettings
-        { HTTP.managerConnCount = 1
-        , HTTP.managerResponseTimeout = Just (1000 * 1000000) -- 1 second
-        , HTTP.managerWrapIOException = id
+    managerSettings = defaultManagerSettings
+        { managerConnCount = 1
+        , managerResponseTimeout = Just (1000 * 1000000) -- 1 second
+        , managerWrapIOException = id
 #if MIN_VERSION_http_client(0,3,7)
-        , HTTP.managerIdleConnectionCount = 1
+        , managerIdleConnectionCount = 1
 #endif
         }
 
@@ -482,49 +475,49 @@ testQueries prefix n = map (\i → ("Id", T.encodeUtf8 prefix <> "-" <> sshow i)
 
 putItems
     ∷ Int -- ^ number of items per thread
-    → HTTP.Request -- ^ request template
+    → Request -- ^ request template
     → Int -- ^ thread Id
     → [Request]
 putItems itemsPerThread req threadId =
     map newReq $ testItems (sshow threadId) itemsPerThread
   where
     newReq i = req
-        { HTTP.requestBody = RequestBodyLBS . encode . DY.attributesJson . DY.attributes $ i
-        , HTTP.method = "PUT"
+        { requestBody = RequestBodyLBS . encode . DY.attributesJson . DY.attributes $ i
+        , method = "PUT"
         }
 
 getItems0
     ∷ Int -- ^ number of items per thread
-    → HTTP.Request -- ^ request template
+    → Request -- ^ request template
     → Int -- ^ thread Id
     → [Request]
 getItems0 itemsPerThread req _ = replicate itemsPerThread $ req
-    { HTTP.method = "GET"
-    , HTTP.path = "Id/0-0"
+    { method = "GET"
+    , path = "Id/0-0"
     }
     -- DY.getItem tableName $ DY.hk "Id" (DY.DString "0-0")
 
 getItems1
     ∷ Int -- ^ number of items per thread
-    → HTTP.Request -- ^ request template
+    → Request -- ^ request template
     → Int -- ^ thread Id
     → [Request]
 getItems1 itemsPerThread req threadId = replicate itemsPerThread $ req
-    { HTTP.method = "GET"
-    , HTTP.path = "Id/" <> sshow threadId <> "-0"
+    { method = "GET"
+    , path = "Id/" <> sshow threadId <> "-0"
     }
 
 getItems2
     ∷ Int -- ^ number of items per thread
-    → HTTP.Request -- ^ request template
+    → Request -- ^ request template
     → Int -- ^ thread Id
     → [Request]
 getItems2 itemsPerThread req threadId = map newReq $
     testQueries (sshow threadId) itemsPerThread
   where
     newReq (key,val) = req
-        { HTTP.method = "GET"
-        , HTTP.path = key <> "/" <> val
+        { method = "GET"
+        , path = key <> "/" <> val
         }
 
 -- -------------------------------------------------------------------------- --
