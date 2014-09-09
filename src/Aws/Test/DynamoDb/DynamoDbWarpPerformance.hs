@@ -306,6 +306,7 @@ server params = do
             return $ \a b c → do
                 atomicModifyIORef ref $ \i → (succ i, ())
                 mkConn a b c
+        , managerConnCount = 200 -- FIXME make this a test parameter
         }
 
     dyCfg ∷ DY.DdbConfiguration NormalQuery
