@@ -198,6 +198,7 @@ data ServerParams = ServerParams
     { _serverTestParams ∷ !TestParams
     , _serverHost ∷ !B.ByteString
     , _serverPort ∷ !Int
+    , _dynamoDbConnectionCount ∷ !Int
     , _serverMode ∷ !ServerTestMode
     }
     deriving (Show, Read, Eq, Typeable)
@@ -209,6 +210,7 @@ defaultServerParams = ServerParams
     { _serverTestParams = defaultTestParams
     , _serverHost = "127.0.0.1"
     , _serverPort = 8080
+    , _dynamoDbConnectionCount = 200
     , _serverMode = ClientMode
     }
 
@@ -217,6 +219,7 @@ instance ToJSON ServerParams where
         [ "testParams" .= _serverTestParams
         , "host" .= B8.unpack _serverHost
         , "port" .= _serverPort
+        , "dynamoDbConnectionCount" .= _dynamoDbConnectionCount
         , "mode" .= _serverMode
         ]
 
@@ -225,6 +228,7 @@ instance FromJSON (ServerParams → ServerParams) where
         <$< serverTestParams %.: "testParams" % o
         <*< serverHost . from B.packedChars ..: "host" % o
         <*< serverPort ..: "port" % o
+        <*< dynamoDbConnectionCount ..: "dynamoDbConnectionCount" % o
         <*< serverMode ..: "mode" % o
 
 pServerParams ∷ MParser ServerParams
@@ -238,6 +242,11 @@ pServerParams = id
         % long "port"
         <> metavar "INT"
         <> help "port of the test HTTP server"
+    <*< dynamoDbConnectionCount .:: option auto
+        % long "dynamodb-connection-count"
+        <> long "dy-conn-count"
+        <> metavar "INT"
+        <> help "maximum number of open connections to a DynamoDb endpoint"
     <*< serverMode .:: option (eitherReader modeReader)
         % long "mode"
         <> metavar "server|client"
@@ -299,7 +308,7 @@ server params = do
             return $ \a b c → do
                 atomicModifyIORef ref $ \i → (succ i, ())
                 mkConn a b c
-        , managerConnCount = 200 -- FIXME make this a test parameter
+        , managerConnCount = (_dynamoDbConnectionCount params)
         }
 
     dyCfg ∷ DY.DdbConfiguration NormalQuery
