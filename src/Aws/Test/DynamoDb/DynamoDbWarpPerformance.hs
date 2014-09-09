@@ -425,7 +425,8 @@ runThread manager = flip foldM mempty $ \stat req → do
     case response of
         Right _ → return $ stat <> successStat (realToFrac t * 1000)
         -- FIXME we should also catch IO exceptions, I guess.
-        Left (e ∷ HTTP.HttpException) → return $ stat <> failStat (realToFrac t * 1000) (sshow e)
+        Left (e ∷ HTTP.HttpException) → return $
+            stat <> failStat (realToFrac t * 1000) (sshow $ pruneHttpError e)
 
 -- | Use one 'Manager' per thread.
 --
