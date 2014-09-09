@@ -107,7 +107,7 @@ $(makeLenses ''TestParams)
 
 instance ToJSON TestParams where
     toJSON TestParams{..} = object
-        [ "ThreadsCount" .= _paramThreadCount
+        [ "ThreadCount" .= _paramThreadCount
         , "RequestCount" .= _paramRequestCount
         , "ReadCapacity" .= _paramReadCapacity
         , "WriteCapacity" .= _paramWriteCapacity
