@@ -273,6 +273,7 @@ server params = do
         -- counts number of outgoing TCP connections
         refTcpConnections ← newIORef (0 ∷ Int)
         refStat ← newIORef (mempty ∷ Stat)
+        startTime ← getTime
 
         -- ---------------------------------------- --
         -- run server API
@@ -291,8 +292,11 @@ server params = do
 
             -- generate reports
             `finally` do
-                print =<< readIORef refStat
-                print =<< readIORef refTcpConnections
+                endTime ← getTime
+                stat ← readIORef refStat
+                printStat "test server" (realToFrac $ endTime - startTime) stat
+                tcpCons ← readIORef refTcpConnections
+                T.putStrLn $ "Number of client TCP connection: " <> sshow tcpCons
 
   where
     -- A manager that counts TCP connections
